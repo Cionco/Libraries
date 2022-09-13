@@ -37,9 +37,9 @@ public class FormBuilder {
 	 * Add new pair of label and JTextField with modifiers
 	 * 
 	 * @param label String to label the textfield with
-	 * @param am    function with modifiers for the textfield
+	 * @param am    function(s) with modifiers for the textfield. Executes them in the order they're passed in
 	 */
-	public Component cAdd(String label, IAddModifier am) {
+	public Component cAdd(String label, IAddModifier... am) {
 		return cAdd(pane(), label, JTextField.class, am);
 	}
 
@@ -59,9 +59,9 @@ public class FormBuilder {
 	 * 
 	 * @param label String to label the component with
 	 * @param c     Type of the component
-	 * @param am    function with modifiers for the component
+	 * @param am    function(s) with modifiers for the component. Executes them in the order they're passed in
 	 */
-	public Component cAdd(String label, Class<? extends Component> c, IAddModifier am) {
+	public Component cAdd(String label, Class<? extends Component> c, IAddModifier... am) {
 		try {
 			return cAdd(pane(), label, c.getDeclaredConstructor((Class[]) null).newInstance(), am);
 		} catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException | SecurityException e) {
@@ -86,9 +86,9 @@ public class FormBuilder {
 	 * 
 	 * @param label String to label the component with
 	 * @param comp  component to add
-	 * @param am    function with modifiers for the component
+	 * @param am    function(s) with modifiers for the component. Executes them in the order they're passed in
 	 */
-	public Component cAdd(String label, Component comp, IAddModifier am) {
+	public Component cAdd(String label, Component comp, IAddModifier... am) {
 		return cAdd(pane(), label, comp, am);
 	}
 
@@ -109,9 +109,9 @@ public class FormBuilder {
 	 * 
 	 * @param pane  JPanel to which the pair should be added
 	 * @param label String to label the textfield with
-	 * @param am    function with modifiers for the textfield
+	 * @param am    function(s) with modifiers for the textfield. Executes them in the order they're passed in
 	 */
-	private Component cAdd(JPanel pane, String label, IAddModifier am) {
+	private Component cAdd(JPanel pane, String label, IAddModifier... am) {
 		return cAdd(pane, label, JTextField.class, am);
 	}
 
@@ -134,9 +134,9 @@ public class FormBuilder {
 	 * @param pane  JPanel to which the pair should be added
 	 * @param label String to label the component with
 	 * @param c     Type of the component
-	 * @param am    function with modifiers for the component
+	 * @param am    function(s) with modifiers for the component. Executes them in the order they're passed in
 	 */
-	private Component cAdd(JPanel pane, String label, Class<? extends Component> c, IAddModifier am) {
+	private Component cAdd(JPanel pane, String label, Class<? extends Component> c, IAddModifier... am) {
 		try {
 			return cAdd(pane, label, c.getDeclaredConstructor((Class[]) null).newInstance(), am);
 		} catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException | SecurityException e) {
@@ -164,13 +164,13 @@ public class FormBuilder {
 	 * @param pane  JPanel to which the pair should be added
 	 * @param label String to label the component with
 	 * @param comp  component to add
-	 * @param am    function with modifiers for the component
+	 * @param am    function(s) with modifiers for the component. Executes them in the order they're passed in
 	 */
-	private Component cAdd(JPanel pane, String label, Component comp, IAddModifier am) {
+	private Component cAdd(JPanel pane, String label, Component comp, IAddModifier... am) {
 		JLabel l = new JLabel(label, JLabel.TRAILING);
 		pane.add(l);
 		l.setLabelFor(comp);
-		am.addMod(comp);
+		for(IAddModifier i : am) i.addMod(comp);
 		pane.add(comp);
 		attributeCount++;
 		return comp;
