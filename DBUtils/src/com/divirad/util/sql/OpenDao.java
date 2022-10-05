@@ -26,7 +26,7 @@ import java.util.StringJoiner;
  *            Must be final and not extend another class.
  *            Must have annotation SqlMarker.TableView
  */
-public class OpenDao<T> extends OpenDaoBase<T> {
+public abstract class OpenDao<T> extends OpenDaoBase<T> {
     protected String field_update_list;
     protected String field_list;
     protected String param_list;
@@ -41,9 +41,11 @@ public class OpenDao<T> extends OpenDaoBase<T> {
 
     protected Field[] primaryKeys;
     protected Field[] notAutomatedKeys;
+    protected Field[] valueFields;
     protected Field[] allFields;
 
     protected boolean isWholeTable;
+    protected boolean isOneToNJoinable;
 
     public OpenDao(Class<T> cls) {
         super(cls);
@@ -52,6 +54,7 @@ public class OpenDao<T> extends OpenDaoBase<T> {
             throw new IllegalArgumentException("Can't use class: must have annotation MysqlMarker.TableView");
         this.tableName = Database.getLeadingIdentifierSign() + annotation.tableName() + Database.getTrailingIdentifierSign();
         this.isWholeTable = annotation.isWholeTable();
+        this.isOneToNJoinable = annotation.isOneToNJoinable();
         
         analyzeFields();
         makeStrings();
@@ -60,11 +63,15 @@ public class OpenDao<T> extends OpenDaoBase<T> {
     private void analyzeFields() {
         List<Field> primaryKeys = new ArrayList<>();
         List<Field> notAutomatedKeys = new ArrayList<>();
+        List<Field> valueFields = new ArrayList<>();
         List<Field> allFields = new ArrayList<>();
         for (Field field : this.cls.getDeclaredFields()) {
             if (field.getAnnotation(SqlMarker.IgnoreField.class) != null)
                 continue;
             allFields.add(field);
+            if (field.getAnnotation(SqlMarker.JoinField.class) != null)
+            	continue;
+            valueFields.add(field);
             if (field.getAnnotation(SqlMarker.PrimaryKey.class) != null) {
                 primaryKeys.add(field);
             }
@@ -74,6 +81,7 @@ public class OpenDao<T> extends OpenDaoBase<T> {
         }
         this.primaryKeys = primaryKeys.toArray(new Field[0]);
         this.notAutomatedKeys = notAutomatedKeys.toArray(new Field[0]);
+        this.valueFields = valueFields.toArray(new Field[0]);
         this.allFields = allFields.toArray(new Field[0]);
     }
 
@@ -202,6 +210,8 @@ public class OpenDao<T> extends OpenDaoBase<T> {
                     f.set(result, rs.getTime(i));
                 else if (f.getType() == Timestamp.class)
                     f.set(result, rs.getTimestamp(i));
+                else if (isOneToNJoinable && f.getType().isInstance(List.class))
+                	f.set(result, getJoinObjects(f));
                 else
                     throw new IllegalStateException("Unknown type of field");
             }
@@ -212,6 +222,8 @@ public class OpenDao<T> extends OpenDaoBase<T> {
         }
     }
 
+    protected abstract <J> ArrayList<J> getJoinObjects(Field f);
+    
     /**
      * Inserts a new row in the table. Only available if class represents whole table
      *

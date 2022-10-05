@@ -22,6 +22,8 @@ public class SqlMarker {
          *  true if all columns are in this class as field
          */
         boolean isWholeTable();
+        
+        boolean isOneToNJoinable();
     }
 
     /**
@@ -47,4 +49,8 @@ public class SqlMarker {
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.FIELD)
     public @interface IgnoreField {}
+    
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.FIELD)
+    public @interface JoinField {}
 }
