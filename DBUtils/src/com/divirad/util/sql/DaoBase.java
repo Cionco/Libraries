@@ -35,6 +35,8 @@ public abstract class DaoBase<T> {
     
     protected abstract ArrayList<T> selectAll() throws Exception;
     
+    protected abstract ArrayList<T> selectAll(T data, String... fieldNames) throws Exception;
+    
     protected abstract void insert(T data) throws Exception;
     
     protected abstract void insertAll(ArrayList<T> data) throws Exception;

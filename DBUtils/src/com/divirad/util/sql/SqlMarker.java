@@ -47,4 +47,12 @@ public class SqlMarker {
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.FIELD)
     public @interface IgnoreField {}
+    
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.FIELD)
+    public @interface OneToN {
+    	Class<?> joinClass();  
+    	Class<?> daoClass();
+    	String referencedFieldName();
+    }
 }
