@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.StringJoiner;
 
 /**
- * Base Dao class.
+ * Base Dao class. Exact same thing as {@link Dao}, just with public CRUD methods
  * Uses reflection to create to automatically create sql commands:
  * -select via Primary Key
  * -insert all
@@ -26,7 +26,7 @@ import java.util.StringJoiner;
  *            Must be final and not extend another class.
  *            Must have annotation SqlMarker.TableView
  */
-public class Dao<T> extends DaoBase<T> {
+public class OpenDao<T> extends OpenDaoBase<T> {
     protected String field_update_list;
     protected String field_list;
     protected String param_list;
@@ -45,7 +45,7 @@ public class Dao<T> extends DaoBase<T> {
 
     protected boolean isWholeTable;
 
-    public Dao(Class<T> cls) {
+    public OpenDao(Class<T> cls) {
         super(cls);
         SqlMarker.TableView annotation = cls.getAnnotation(SqlMarker.TableView.class);
         if (annotation == null)
@@ -156,7 +156,7 @@ public class Dao<T> extends DaoBase<T> {
      * Converts a ResultSet to a T object
      */
     @Override
-    protected T convFirstInResultSet(ResultSet rs) throws SQLException {
+	protected T convFirstInResultSet(ResultSet rs) throws SQLException {
         if (rs == null || !rs.next()) return null;
         return convertCurrentFromResultSet(rs);
     }
@@ -219,7 +219,7 @@ public class Dao<T> extends DaoBase<T> {
      *             All fields will be inserted.
      */
     @Override
-    protected void insert(T data) {
+    public void insert(T data) {
         Database.execute(sql_insert, ps -> setParams(ps, data, this.notAutomatedKeys, 1));
     }
     
@@ -230,7 +230,7 @@ public class Dao<T> extends DaoBase<T> {
      * @param data List with all the data that should be inserted. All fields of all elements will be inserted.
      */
     @Override
-    protected void insertAll(ArrayList<T> data) {
+    public void insertAll(ArrayList<T> data) {
     	String sql_multi_insert = new String(sql_insert);
     	for(int i = 1; i < data.size(); i++) sql_multi_insert += "," + param_list;
     	
@@ -249,7 +249,7 @@ public class Dao<T> extends DaoBase<T> {
      *             All fields will be updated.
      */
     @Override
-    protected void update(T data) {
+    public void update(T data) {
         if (!this.isWholeTable)
             throw new UnsupportedOperationException(
                     "Usage of udpate is not possible: " + this.cls.getName() + " does not represent whole mysql table");
@@ -264,7 +264,7 @@ public class Dao<T> extends DaoBase<T> {
      * 
      * @param data contains the data that should be replaced. All fields of all elements will be inserted/updated.
      */
-    protected void replace(T data) {
+    public void replace(T data) {
     		if(!this.isWholeTable)
     			throw new UnsupportedOperationException(
     					"Usage of replace is not possible: " + this.cls.getName() + " does not represent whole table");
@@ -279,7 +279,7 @@ public class Dao<T> extends DaoBase<T> {
      * 
      * @param data List with all the data that should be replaced. All fields of all elements will be inserted/updated.
      */
-    protected void replaceAll(ArrayList<T> data) {
+    public void replaceAll(ArrayList<T> data) {
 	    	String sql_multi_replace = new String(sql_replace);
 	    	for(int i = 1; i < data.size(); i++) sql_multi_replace += "," + param_list;
 	    	
@@ -290,7 +290,7 @@ public class Dao<T> extends DaoBase<T> {
 	    	});
     }
     
-    protected void delete(T data) {
+    public void delete(T data) {
     	Database.execute(sql_delete, ps -> setParams(ps, data, primaryKeys, 1));
     }
 
@@ -302,11 +302,11 @@ public class Dao<T> extends DaoBase<T> {
      * @return T object containing the data of the row
      */
     @Override
-    protected T select(T data) {
+    public T select(T data) {
     	return Database.query(sql_select, ps -> setParams(ps, data, this.primaryKeys, 1), this::convFirstInResultSet);
     }
     
-    protected ArrayList<T> selectAll() {
+    public ArrayList<T> selectAll() {
     	return Database.query("SELECT * FROM " + this.tableName, this::convAllInResultSet);
     }
 }
