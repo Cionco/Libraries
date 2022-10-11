@@ -210,8 +210,8 @@ public abstract class Dao<T> extends DaoBase<T> {
                     f.set(result, rs.getTime(i));
                 else if (f.getType() == Timestamp.class)
                     f.set(result, rs.getTimestamp(i));
-                else if (isOneToNJoinable && f.getType().isInstance(List.class))
-                	f.set(result, getJoinObjects(f));
+                else if (isOneToNJoinable && List.class.isAssignableFrom(f.getType()))
+                	f.set(result, getJoinObjects(f, result, this.primaryKeys));
                 else
                     throw new IllegalStateException("Unknown type of field");
             }
@@ -222,7 +222,7 @@ public abstract class Dao<T> extends DaoBase<T> {
         }
     }
     
-    protected abstract <J> ArrayList<J> getJoinObjects(Field f);
+    protected abstract <J> ArrayList<J> getJoinObjects(Field f, T result, Field[] primaryKeys);
 
     /**
      * Inserts a new row in the table. Only available if class represents whole table
