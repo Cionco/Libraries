@@ -266,7 +266,7 @@ public abstract class Dao<T> extends DaoBase<T> {
             throw new UnsupportedOperationException(
                     "Usage of udpate is not possible: " + this.cls.getName() + " does not represent whole mysql table");
         Database.execute(sql_update, ps -> {
-            int nextIndex = setParams(ps, data, this.allFields, 1);
+            int nextIndex = setParams(ps, data, this.valueFields, 1);
             setParams(ps, data, this.primaryKeys, nextIndex);
         });
     }
@@ -281,7 +281,7 @@ public abstract class Dao<T> extends DaoBase<T> {
     			throw new UnsupportedOperationException(
     					"Usage of replace is not possible: " + this.cls.getName() + " does not represent whole table");
     		Database.execute(sql_replace, ps -> {
-    			int nextIndex = setParams(ps, data, this.allFields, 1);
+    			int nextIndex = setParams(ps, data, this.valueFields, 1);
     			setParams(ps, data, this.primaryKeys, nextIndex);
     		});
     }
