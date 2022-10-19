@@ -90,7 +90,7 @@ public abstract class Dao<T> extends DaoBase<T> {
         StringJoiner param_joiner = new StringJoiner(",", "(", ")");
         StringJoiner primary_joiner = new StringJoiner(" AND ");
         StringJoiner update_joiner = new StringJoiner(",");
-        for (Field field : this.allFields) {
+        for (Field field : this.valueFields) {
             update_joiner.add(field.getName() + "=?");
             field.setAccessible(true);
         }
