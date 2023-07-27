@@ -17,6 +17,7 @@ public class Database {
 	private static String username; 
 	private static String password; 
 	private static String params;	 
+	private static boolean integratedSecurity;
 	
 	static {
 		loadProperties();
@@ -32,8 +33,9 @@ public class Database {
 			engine = props.getProperty("db.engine", "mysql");
 			hostname = props.getProperty("db.hostname");
 			database = props.getProperty("db.database");
-		    username = props.getProperty("db.username");
-		    password = props.getProperty("db.password");
+		    username = props.getProperty("db.username", "");
+		    password = props.getProperty("db.password", "");
+		    integratedSecurity = Boolean.parseBoolean(props.getProperty("db.useIntegratedSecurity", "false"));
 		    params = props.getProperty("params", "");
 		} catch (FileNotFoundException e) {
 			System.err.println("Database properties file not found");
@@ -80,7 +82,7 @@ public class Database {
      * @return the return value of useResultSet
      */
     public static <T> T query(String sql, ISetParams setParams, IUseResultSet<T> useResultSet) {
-    	try (Connection con = ConnectionFactory.createConnection(engine, hostname, database, username, password, params)) {
+    	try (Connection con = ConnectionFactory.createConnection(engine, hostname, database, integratedSecurity, username, password, params)) {
             try (PreparedStatement ps = con.prepareStatement(sql)) {
                 setParams.run(ps);
                 try (ResultSet rs = ps.executeQuery()) {
@@ -112,7 +114,7 @@ public class Database {
      */
     public static int execute(String sql, ISetParams setParams) {
     	int updateCount = -1;
-    	try (Connection con = ConnectionFactory.createConnection(engine, hostname, database, username, password, params)) {
+    	try (Connection con = ConnectionFactory.createConnection(engine, hostname, database, integratedSecurity, username, password, params)) {
         		try (PreparedStatement ps = con.prepareStatement(sql)) {
                 setParams.run(ps);
                 ps.execute();
