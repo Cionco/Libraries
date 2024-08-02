@@ -9,6 +9,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import org.apache.commons.dbcp2.BasicDataSource;
+
 public class Database {
 	
 	private static String engine;   
@@ -18,6 +20,8 @@ public class Database {
 	private static String password; 
 	private static String params;	 
 	private static boolean integratedSecurity;
+	
+	private static DBCPDataSource ds;
 	
 	static {
 		loadProperties();
@@ -44,6 +48,8 @@ public class Database {
 			System.err.println(e.getMessage());
 			System.exit(1);
 		}
+		
+		ds = new DBCPDataSource(engine, hostname, database, integratedSecurity, username, password, params);
 	}
 	
 	public static String getLeadingIdentifierSign() {
@@ -82,7 +88,7 @@ public class Database {
      * @return the return value of useResultSet
      */
     public static <T> T query(String sql, ISetParams setParams, IUseResultSet<T> useResultSet) {
-    	try (Connection con = ConnectionFactory.createConnection(engine, hostname, database, integratedSecurity, username, password, params)) {
+    	try (Connection con = ds.getConnection()) {
             try (PreparedStatement ps = con.prepareStatement(sql)) {
                 setParams.run(ps);
                 try (ResultSet rs = ps.executeQuery()) {
@@ -114,7 +120,7 @@ public class Database {
      */
     public static int execute(String sql, ISetParams setParams) {
     	int updateCount = -1;
-    	try (Connection con = ConnectionFactory.createConnection(engine, hostname, database, integratedSecurity, username, password, params)) {
+    	try (Connection con = ds.getConnection()) {
         		try (PreparedStatement ps = con.prepareStatement(sql)) {
                 setParams.run(ps);
                 ps.execute();
@@ -128,5 +134,52 @@ public class Database {
 
     public static int getLastID() {
         return query("SELECT LAST_INSERT_ID();", rs -> rs != null && rs.next() ? rs.getInt(1) : null);
+    }
+    
+    private static class DBCPDataSource {
+    	
+    	private BasicDataSource ds;
+    	
+    	public DBCPDataSource(String engine, String hostname, String database, boolean useIntegratedSecurity, String username, String password, String params) {
+    		ds = new BasicDataSource();
+    		ds.setUrl(getConnectionString(engine, hostname, database, useIntegratedSecurity, params));
+    		if(!useIntegratedSecurity) {
+    			ds.setUsername(username);
+    			ds.setPassword(password);
+    		}
+    		ds.setMinIdle(5);
+    		ds.setMaxIdle(10);
+    		ds.setMaxOpenPreparedStatements(100);
+    	}    	
+    	
+    	public Connection getConnection() throws SQLException {
+    		return ds.getConnection();
+    	}
+    	
+    	private String getConnectionString(String engine, String hostname, String database, 
+				boolean useIntegratedSecurity, String params) {
+    		if(engine.equals("mysql")) {
+    			if(useIntegratedSecurity) return getBaseConnectionString(engine, hostname)
+    					+ "/" + database
+    					+ "?" + "IntegratedSecurity=yes" + params;
+    			else return getBaseConnectionString(engine, hostname) 
+    					+ "/" + database 
+    					+ "?" + params;
+    		} else if(engine.equals("sqlserver")) {
+    			if(useIntegratedSecurity) 
+    				return getBaseConnectionString(engine, hostname)
+    					+ ";database=" + database 
+    					+ ";integratedSecurity=true"
+    					+ params;
+    			else return getBaseConnectionString(engine, hostname)
+    					+ ";database=" + database 
+    					+ params;
+    		} else throw new IllegalArgumentException("Not defined for engine " + engine);
+    	}
+    	
+    	
+    	private String getBaseConnectionString(String engine, String hostname) {
+    		return "jdbc:" + engine + "://" + hostname;
+    	}
     }
 }
