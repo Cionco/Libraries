@@ -52,6 +52,10 @@ public class Database {
 		ds = new DBCPDataSource(engine, hostname, database, integratedSecurity, username, password, params);
 	}
 	
+	public static void shutdown() throws SQLException {
+		ds.shutdown();
+	}
+	
 	public static String getLeadingIdentifierSign() {
 		return EngineSpecifics.getLeadingIdentifierSign(engine);
 	}
@@ -180,6 +184,10 @@ public class Database {
     	
     	private String getBaseConnectionString(String engine, String hostname) {
     		return "jdbc:" + engine + "://" + hostname;
+    	}
+    	
+    	public void shutdown() throws SQLException {
+    		ds.close();
     	}
     }
 }
