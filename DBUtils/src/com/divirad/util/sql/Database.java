@@ -114,7 +114,7 @@ public class Database {
 	 * 
 	 * @param id the id in the list
 	 */
-	private void loadProfile(int id) {
+	private static void loadProfile(int id) {
 		try {
 			ds.shutdown();
 		} catch (SQLException e) {
@@ -124,7 +124,7 @@ public class Database {
 		ds = new DBCPDataSource(dbprofiles.get(id));
 	}
 	
-	public void cycleProfile() {
+	public static void cycleProfile() {
 		loadProfile(++activeProfileId % dbprofiles.size());
 	}
 	
