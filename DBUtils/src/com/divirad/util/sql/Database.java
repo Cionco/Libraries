@@ -7,21 +7,51 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.dbcp2.BasicDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+
+/**
+ * Wrapper for all operations done on a database.
+ * Loads database connection properties from a properties file in the application directory <code>properties.prop</code>
+ * 
+ * The properties needed are
+ * - engine
+ * - hostname
+ * - database
+ * - username
+ * - password
+ * - useIntegratedSecurity (if this is set, no need for username & password)
+ * - params (any additional parameters that should be added to the end of the connection string)
+ * Each of these properties uses the prefix <code>db.</code>
+ * 
+ * Multiple database profiles can be created by specifying a <code>profiles</code> property which lists the names of the profiles split by
+ * a single comma (no space). 
+ * Then, for each profile, instead of just the <code>db.</code> prefix, use <code>db.profilename.</code> prefix
+ */
 public class Database {
 	
-	private static String engine;   
-	private static String hostname; 
-	private static String database; 
-	private static String username; 
-	private static String password; 
-	private static String params;	 
-	private static boolean integratedSecurity;
+	private static class DBProfile {
+		private String engine;   
+		private String hostname; 
+		private String database; 
+		private String username; 
+		private String password; 
+		private String params;	 
+		private boolean integratedSecurity;		
+	}
+	
+	private static List<DBProfile> dbprofiles = new ArrayList<>();	
+	private static int activeProfileId = 0;
 	
 	private static DBCPDataSource ds;
+	
+	static Logger log = LoggerFactory.getLogger(Database.class);
 	
 	static {
 		loadProperties();
@@ -34,13 +64,22 @@ public class Database {
 			Properties props = new Properties();
 			props.load(fis);
 			
-			engine = props.getProperty("db.engine", "mysql");
-			hostname = props.getProperty("db.hostname");
-			database = props.getProperty("db.database");
-		    username = props.getProperty("db.username", "");
-		    password = props.getProperty("db.password", "");
-		    integratedSecurity = Boolean.parseBoolean(props.getProperty("db.useIntegratedSecurity", "false"));
-		    params = props.getProperty("params", "");
+			String profiles = props.getProperty("db.profiles", null);
+			
+			if(profiles == null) {
+				DBProfile p = new DBProfile();
+				p.engine = props.getProperty("db.engine", "mysql");
+				p.hostname = props.getProperty("db.hostname");
+				p.database = props.getProperty("db.database");
+			    p.username = props.getProperty("db.username", "");
+			    p.password = props.getProperty("db.password", "");
+			    p.integratedSecurity = Boolean.parseBoolean(props.getProperty("db.useIntegratedSecurity", "false"));
+			    p.params = props.getProperty("db.params", "");
+			    dbprofiles.add(p);
+			} else {
+				for(String pName : profiles.split(","))
+					dbprofiles.add(readProfile(props, pName));
+			}
 		} catch (FileNotFoundException e) {
 			System.err.println("Database properties file not found");
 			System.exit(1);
@@ -49,7 +88,56 @@ public class Database {
 			System.exit(1);
 		}
 		
-		ds = new DBCPDataSource(engine, hostname, database, integratedSecurity, username, password, params);
+		ds = new DBCPDataSource(dbprofiles.get(activeProfileId));
+	}
+	
+	/**
+	 * Reads a database profile set from a properties object
+	 * @param props the properties object
+	 * @param name the name of the database profile
+	 * @return the new profile
+	 */
+	private static DBProfile readProfile(Properties props, String name) {
+		DBProfile p = new DBProfile();
+		p.engine = props.getProperty("db." + name + ".engine", "mysql");
+		p.hostname = props.getProperty("db." + name + ".hostname");
+		p.database = props.getProperty("db." + name + ".database");
+	    p.username = props.getProperty("db." + name + ".username", "");
+	    p.password = props.getProperty("db." + name + ".password", "");
+	    p.integratedSecurity = Boolean.parseBoolean(props.getProperty("db." + name + ".useIntegratedSecurity", "false"));
+	    p.params = props.getProperty("db." + name + ".params", "");
+	    return p;
+	}
+	
+	/**
+	 * Loads a profile from the list <code>dbprofiles</code>
+	 * 
+	 * @param id the id in the list
+	 */
+	private void loadProfile(int id) {
+		try {
+			ds.shutdown();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		activeProfileId = id;
+		ds = new DBCPDataSource(dbprofiles.get(id));
+	}
+	
+	public void cycleProfile() {
+		loadProfile(++activeProfileId % dbprofiles.size());
+	}
+	
+	public static void openTransaction() {
+		ds.openTransaction();
+	}
+	
+	public static void commit() {
+		ds.commitTransaction();
+	}
+	
+	public static void rollback() {
+		ds.rollbackTransaction();
 	}
 	
 	public static void shutdown() throws SQLException {
@@ -57,11 +145,11 @@ public class Database {
 	}
 	
 	public static String getLeadingIdentifierSign() {
-		return EngineSpecifics.getLeadingIdentifierSign(engine);
+		return EngineSpecifics.getLeadingIdentifierSign(dbprofiles.get(activeProfileId).engine);
 	}
 	
 	public static String getTrailingIdentifierSign() {
-		return EngineSpecifics.getTrailingIdentifierSign(engine);
+		return EngineSpecifics.getTrailingIdentifierSign(dbprofiles.get(activeProfileId).engine);
 	}
 	
 	
@@ -92,17 +180,28 @@ public class Database {
      * @return the return value of useResultSet
      */
     public static <T> T query(String sql, ISetParams setParams, IUseResultSet<T> useResultSet) {
-    	try (Connection con = ds.getConnection()) {
-            try (PreparedStatement ps = con.prepareStatement(sql)) {
-                setParams.run(ps);
-                try (ResultSet rs = ps.executeQuery()) {
-                    return useResultSet.run(rs);
-                }
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return null;
-        }
+    	Connection con = null;
+    	try {
+    		con = ds.getConnection();
+    		try(PreparedStatement ps = con.prepareStatement(sql)) {
+    			log.debug("Statement prepared");
+    			setParams.run(ps);
+    			try(ResultSet rs = ps.executeQuery()) {
+    				log.debug("Execute");
+    				return useResultSet.run(rs);
+    			}
+    		}
+    	} catch(SQLException e) {
+    		e.printStackTrace();
+    		return null;
+    	} finally {
+    		try {
+    			if(con.getAutoCommit())
+    				con.close();
+    		} catch(SQLException e) {
+    			e.printStackTrace();
+    		}
+    	}
     }
 
     /**
@@ -124,15 +223,27 @@ public class Database {
      */
     public static int execute(String sql, ISetParams setParams) {
     	int updateCount = -1;
-    	try (Connection con = ds.getConnection()) {
-        		try (PreparedStatement ps = con.prepareStatement(sql)) {
-                setParams.run(ps);
-                ps.execute();
-                updateCount = ps.getUpdateCount();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        } 
+    	Connection con = null;
+    	try {
+    		con = ds.getConnection();
+    		try(PreparedStatement ps = con.prepareStatement(sql)) {
+    			log.debug("Statement prepared");
+    			setParams.run(ps);
+    			log.debug("Parameters set");
+    			ps.execute();
+    			log.debug("Executed");
+    			updateCount = ps.getUpdateCount();
+    		}
+    	} catch(SQLException e) {
+    		e.printStackTrace();
+    	} finally {
+    		try {
+    			if(con.getAutoCommit())
+    				con.close();
+    		} catch(SQLException e) {
+    			e.printStackTrace();
+    		}
+    	}
     	return updateCount;
     }
 
@@ -144,12 +255,14 @@ public class Database {
     	
     	private BasicDataSource ds;
     	
-    	public DBCPDataSource(String engine, String hostname, String database, boolean useIntegratedSecurity, String username, String password, String params) {
+    	private Connection activeTransaction; 
+    	
+    	public DBCPDataSource(DBProfile p) {
     		ds = new BasicDataSource();
-    		ds.setUrl(getConnectionString(engine, hostname, database, useIntegratedSecurity, params));
-    		if(!useIntegratedSecurity) {
-    			ds.setUsername(username);
-    			ds.setPassword(password);
+    		ds.setUrl(getConnectionString(p.engine, p.hostname, p.database, p.integratedSecurity, p.params));
+    		if(!p.integratedSecurity) {
+    			ds.setUsername(p.username);
+    			ds.setPassword(p.password);
     		}
     		ds.setMinIdle(5);
     		ds.setMaxIdle(10);
@@ -157,7 +270,52 @@ public class Database {
     	}    	
     	
     	public Connection getConnection() throws SQLException {
+    		if(activeTransaction != null) {
+    			log.debug("Using active transaction connection");
+    			return activeTransaction;
+    		}
+    		log.debug("Establishing \"new\" connection");
     		return ds.getConnection();
+    	}
+    	
+    	public void openTransaction() {
+    		try {
+    			activeTransaction = ds.getConnection();
+    			activeTransaction.setAutoCommit(false);;
+    		} catch(SQLException e) {
+    			e.printStackTrace();
+    		}
+    	}
+    	
+    	public void commitTransaction() {
+    		if(activeTransaction == null)
+    			throw new IllegalStateException("Can't commit transaction when no transaction is open");
+    		try {
+    			activeTransaction.commit();
+    			activeTransaction.setAutoCommit(true);
+    			activeTransaction.close();
+    			activeTransaction = null;
+    		} catch(SQLException e) {
+    			try {
+    				activeTransaction.rollback();
+    			} catch(SQLException e1) {
+    				e1.printStackTrace();
+    			}
+    			e.printStackTrace();
+    		}
+    	}
+    	
+    	public void rollbackTransaction() {
+    		if(activeTransaction == null)
+    			throw new IllegalStateException("Can't rollback transaction when no transaction is open");
+    		try {
+    			activeTransaction.rollback();
+    			activeTransaction.setAutoCommit(true);
+    			activeTransaction.close();
+    			activeTransaction = null;
+    		} catch(SQLException e) {
+    			e.printStackTrace();
+    		}
     	}
     	
     	private String getConnectionString(String engine, String hostname, String database, 
