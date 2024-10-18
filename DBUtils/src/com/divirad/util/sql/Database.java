@@ -1,5 +1,7 @@
 package com.divirad.util.sql;
 
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -8,8 +10,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.slf4j.Logger;
@@ -46,10 +51,12 @@ public class Database {
 		private boolean integratedSecurity;		
 	}
 	
-	private static List<DBProfile> dbprofiles = new ArrayList<>();	
-	private static int activeProfileId = 0;
+	private static Map<String, DBProfile> dbprofiles = new HashMap<>();	
+	private static String activeProfileName = "default";
 	
 	private static DBCPDataSource ds;
+	
+	private static List<PropertyChangeListener> listenerList = new ArrayList<>();
 	
 	static Logger log = LoggerFactory.getLogger(Database.class);
 	
@@ -75,10 +82,10 @@ public class Database {
 			    p.password = props.getProperty("db.password", "");
 			    p.integratedSecurity = Boolean.parseBoolean(props.getProperty("db.useIntegratedSecurity", "false"));
 			    p.params = props.getProperty("db.params", "");
-			    dbprofiles.add(p);
+			    dbprofiles.put("default", p);
 			} else {
 				for(String pName : profiles.split(","))
-					dbprofiles.add(readProfile(props, pName));
+					dbprofiles.put(pName, readProfile(props, pName));
 			}
 		} catch (FileNotFoundException e) {
 			System.err.println("Database properties file not found");
@@ -87,8 +94,31 @@ public class Database {
 			System.err.println(e.getMessage());
 			System.exit(1);
 		}
+	}
+	
+	public static Set<String> getProfileNames() {
+		return dbprofiles.keySet();
+	}
+	
+	public static String getActiveProfileName() {
+		return activeProfileName;
+	}
+	
+	public static void addProfileListener(PropertyChangeListener l) {
+		listenerList.add(l);
+	}
+	
+	public static void removeProfileListener(PropertyChangeListener l) {
+		listenerList.remove(l);
+	}
+	
+	private static void fireProfileChanged(String oldProfileName, String newProfileName) {
+		List<PropertyChangeListener> copy = new ArrayList<>(listenerList);
 		
-		ds = new DBCPDataSource(dbprofiles.get(activeProfileId));
+		PropertyChangeEvent e = new PropertyChangeEvent(ds, "activeProfile", oldProfileName, newProfileName);
+		
+		for(PropertyChangeListener l : copy)
+			l.propertyChange(e);
 	}
 	
 	/**
@@ -114,18 +144,16 @@ public class Database {
 	 * 
 	 * @param id the id in the list
 	 */
-	private static void loadProfile(int id) {
+	public static void loadProfile(String profileName) {
 		try {
-			ds.shutdown();
+			if(ds != null) ds.shutdown();
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}
-		activeProfileId = id;
-		ds = new DBCPDataSource(dbprofiles.get(id));
-	}
-	
-	public static void cycleProfile() {
-		loadProfile(++activeProfileId % dbprofiles.size());
+		String oldProfileName = activeProfileName;
+		activeProfileName = profileName;
+		ds = new DBCPDataSource(dbprofiles.get(profileName));
+		fireProfileChanged(oldProfileName, activeProfileName);
 	}
 	
 	public static void openTransaction() {
@@ -145,11 +173,11 @@ public class Database {
 	}
 	
 	public static String getLeadingIdentifierSign() {
-		return EngineSpecifics.getLeadingIdentifierSign(dbprofiles.get(activeProfileId).engine);
+		return EngineSpecifics.getLeadingIdentifierSign(dbprofiles.get(activeProfileName).engine);
 	}
 	
 	public static String getTrailingIdentifierSign() {
-		return EngineSpecifics.getTrailingIdentifierSign(dbprofiles.get(activeProfileId).engine);
+		return EngineSpecifics.getTrailingIdentifierSign(dbprofiles.get(activeProfileName).engine);
 	}
 	
 	
